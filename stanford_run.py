@@ -1,4 +1,3 @@
-
 import os
 
 import sys
@@ -11,10 +10,11 @@ os.chdir(_p)
 sys.path.append(_p)
 """
 from config import parse_from_dict
+
 parse_from_dict({
     "base": {
         "task_name": "vgg16_stanford",
-        "cuda": False,
+        "cuda": True,
         "seed": 1,
         "checkpoint_path": "",
         "epoch": 0,
@@ -44,7 +44,7 @@ parse_from_dict({
         "shuffle": True,
         "batch_size": 32,
         "test_batch_size": 32,
-        "num_workers": 0
+        "num_workers": 4
     },
     "loss": {
         "criterion": "softmax"
@@ -77,7 +77,9 @@ from prune.universal import Meltable, GatedBatchNorm2d, Conv2dObserver, IterReco
 from prune.utils import analyse_model, finetune
 import torchvision
 import torch.nn.functional as F
+
 import torchvision.models as models
+
 
 class ModifiedVGG16Model(torch.nn.Module):
     def __init__(self):
@@ -102,12 +104,13 @@ class ModifiedVGG16Model(torch.nn.Module):
         x = self.fc(x)
         return x
 
+
 def get_pack():
     set_seeds()
     pack = recover_pack()
 
     pack.net = torch.load('ckps/vgg16_stanford_baseline.ckp', map_location='cpu' if not cfg.base.cuda else 'cuda')
-    
+
     torch.save(pack.net, 'logs/temp.ckp')
 
     GBNs = GatedBatchNorm2d.transform(pack.net)
@@ -116,14 +119,15 @@ def get_pack():
 
     ignored_params = list(map(id, pack.net.fc.parameters()))
     base_params = filter(lambda p: id(p) not in ignored_params, pack.net.parameters())
-    pack.optimizer = torch.optim.SGD([{'params': base_params},{'params': pack.net.fc.parameters(), 'lr': 0.005}], lr=0.0005, momentum=0.9, weight_decay=0.0005)
-
+    pack.optimizer = torch.optim.SGD([{'params': base_params}, {'params': pack.net.fc.parameters(), 'lr': 0.005}],
+                                     lr=0.0005, momentum=0.9, weight_decay=0.0005)
 
     return pack, GBNs
 
+
 def clone_model(net):
-    model = torch.load('logs/temp.ckp', map_location ='cpu' if not cfg.base.cuda else 'cuda')
-    # model = model.cuda()
+    model = torch.load('logs/temp.ckp', map_location='cpu' if not cfg.base.cuda else 'cuda')
+    model = model.cuda()
     gbns = GatedBatchNorm2d.transform(model)
     model.load_state_dict(net.state_dict())
     return model, gbns
@@ -137,19 +141,21 @@ def eval_prune(pack):
     cloned_pack.net = cloned
     Meltable.observe(cloned_pack, 0.001)
     Meltable.melt_all(cloned_pack.net)
-    flops, params = analyse_model(cloned_pack.net, torch.randn(1, 3, 224, 224))
+    flops, params = analyse_model(cloned_pack.net, torch.randn(1, 3, 224, 224).cuda())
     del cloned
     del cloned_pack
-    
+
     return flops, params
 
+
 def prune(pack, GBNs, BASE_FLOPS, BASE_PARAM):
-    LOGS = [] 
-    flops_save_points = set([90,80,70,60,50])
+    LOGS = []
+    flops_save_points = set([90, 80, 70, 60, 50])
     iter_idx = 0
 
     pack.tick_trainset = pack.train_loader
-    prune_agent = IterRecoverFramework(pack, GBNs, sparse_lambda = cfg.gbn.sparse_lambda, flops_eta = cfg.gbn.flops_eta, minium_filter = 3)
+    prune_agent = IterRecoverFramework(pack, GBNs, sparse_lambda=cfg.gbn.sparse_lambda, flops_eta=cfg.gbn.flops_eta,
+                                       minium_filter=3)
     while True:
 
         left_filter = prune_agent.total_filters - prune_agent.pruned_filters
@@ -157,25 +163,27 @@ def prune(pack, GBNs, BASE_FLOPS, BASE_PARAM):
         info = prune_agent.prune(num_to_prune, tick=True, lr=cfg.gbn.lr_min)
         flops, params = eval_prune(pack)
         info.update({
-            'flops': '[%.2f%%] %.3f MFLOPS' % (flops/BASE_FLOPS * 100, flops / 1e6),
-            'param': '[%.2f%%] %.3f M' % (params/BASE_PARAM * 100, params / 1e6)
+            'flops': '[%.2f%%] %.3f MFLOPS' % (flops / BASE_FLOPS * 100, flops / 1e6),
+            'param': '[%.2f%%] %.3f M' % (params / BASE_PARAM * 100, params / 1e6)
         })
         LOGS.append(info)
-        print('Step 1: ter: %d,\t FLOPS: %s,\t Param: %s,\t Left: %d,\t Pruned Ratio: %.2f %%,\t Train Loss: %.4f,\t Test Acc: %.2f' % 
-            (iter_idx, info['flops'], info['param'], info['left'], info['total_pruned_ratio'] * 100, info['train_loss'], info['after_prune_test_acc']))
-        
+        print(
+            'Step 1: ter: %d,\t FLOPS: %s,\t Param: %s,\t Left: %d,\t Pruned Ratio: %.2f %%,\t Train Loss: %.4f,\t Test Acc: %.2f' %
+            (iter_idx, info['flops'], info['param'], info['left'], info['total_pruned_ratio'] * 100, info['train_loss'],
+             info['after_prune_test_acc']))
+
         iter_idx += 1
         if iter_idx % cfg.gbn.T == 0:
             print('Step 2:')
             prune_agent.tock(lr_min=cfg.gbn.lr_min, lr_max=cfg.gbn.lr_max, tock_epoch=cfg.gbn.tock_epoch)
 
-        flops_ratio = flops/BASE_FLOPS * 100
+        flops_ratio = flops / BASE_FLOPS * 100
         for point in [i for i in list(flops_save_points)]:
             if flops_ratio <= point:
                 torch.save(pack.net, './logs/vgg16_stanford/%s.ckp' % str(point))
                 torch.save(pack.net, 'logs/temp.ckp')
                 flops_save_points.remove(point)
-            
+
         if len(flops_save_points) == 0:
             break
 
@@ -184,16 +192,19 @@ def run():
     pack, GBNs = get_pack()
 
     cloned, _ = clone_model(pack.net)
-    BASE_FLOPS, BASE_PARAM = analyse_model(cloned, torch.randn(1, 3, 224, 224))
+    BASE_FLOPS, BASE_PARAM = analyse_model(cloned, torch.randn(1, 3, 224, 224).cuda())
     print('%.3f MFLOPS' % (BASE_FLOPS / 1e6))
     print('%.3f M' % (BASE_PARAM / 1e6))
     del cloned
-    #print(pack.net)
+    # print(pack.net)
     ignored_params = list(map(id, pack.net.fc.parameters()))
     base_params = filter(lambda p: id(p) not in ignored_params, pack.net.parameters())
-    pack.optimizer = torch.optim.SGD([{'params': base_params},{'params': pack.net.fc.parameters(), 'lr': 0.005}], lr=0.0005, momentum=0.9, weight_decay=0.0005)
+    pack.optimizer = torch.optim.SGD([{'params': base_params}, {'params': pack.net.fc.parameters(), 'lr': 0.005}],
+                                     lr=0.0005, momentum=0.9, weight_decay=0.0005)
 
     prune(pack, GBNs, BASE_FLOPS, BASE_PARAM)
+
+
 run()
 
 
