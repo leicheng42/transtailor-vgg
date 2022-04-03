@@ -18,7 +18,7 @@ parse_from_dict({
         "seed": 1,
         "checkpoint_path": "",
         "epoch": 0,
-        "multi_gpus": False,
+        "multi_gpus": True,
         "fp16": False
     },
     "model": {
@@ -128,6 +128,7 @@ def get_pack():
 def clone_model(net):
     model = torch.load('logs/temp.ckp', map_location='cpu' if not cfg.base.cuda else 'cuda')
     model = model.cuda()
+    model = torch.nn.DataParallel(model)
     gbns = GatedBatchNorm2d.transform(model)
     model.load_state_dict(net.state_dict())
     return model, gbns
