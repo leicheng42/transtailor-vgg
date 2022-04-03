@@ -18,8 +18,8 @@ test_dir = os.path.join("datasets", "stanford_test")
 
 
 dataset_dir = os.path.join("datasets/stanford_train")
-train_dir = os.path.join("datasets", "stanford_train_1")
-test_dir = os.path.join("datasets", "stanford_test_1")
+train_dir = os.path.join("datasets", "stanford_train")
+test_dir = os.path.join("datasets", "stanford_test")
 
 train_per = 0.1
 test_per = 0.05
