@@ -18,7 +18,7 @@ parse_from_dict({
         "seed": 1,
         "checkpoint_path": "",
         "epoch": 0,
-        "multi_gpus": True,
+        "multi_gpus": False,
         "fp16": False
     },
     "model": {
@@ -66,7 +66,7 @@ import torch.nn as nn
 import numpy as np
 import torch.optim as optim
 
-# torch.cuda.set_device(0)
+torch.cuda.set_device(0)
 
 from logger import logger
 from main import set_seeds, recover_pack, adjust_learning_rate, _step_lr, _sgdr
