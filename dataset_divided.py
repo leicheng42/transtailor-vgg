@@ -16,8 +16,13 @@ dataset_dir = os.path.join("datasets/Images")
 train_dir = os.path.join("datasets", "stanford_train")
 test_dir = os.path.join("datasets", "stanford_test")
 
-train_per = 0.7
-test_per = 0.3
+
+dataset_dir = os.path.join("datasets/stanford_train")
+train_dir = os.path.join("datasets", "stanford_train_1")
+test_dir = os.path.join("datasets", "stanford_test_1")
+
+train_per = 0.1
+test_per = 0.05
 
 def makedir(new_dir):
     if not os.path.exists(new_dir):
@@ -39,11 +44,13 @@ if __name__ == '__main__':
             for i in range(imgs_num):
                 if i < train_point:
                     out_dir = os.path.join(train_dir, sDir)
-                else:
+                elif i < test_point:
                     out_dir = os.path.join(test_dir, sDir)
+                else:
+                    continue
 
                 makedir(out_dir)
                 out_path = os.path.join(out_dir, os.path.split(imgs_list[i])[-1])
                 shutil.copy(imgs_list[i], out_path)
 
-            print('Class:{}, train:{}, test:{}'.format(sDir, train_point, imgs_num))
+            print('Class:{}, train:{}, test:{}'.format(sDir, train_point, test_point - train_point))
