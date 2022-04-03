@@ -127,7 +127,7 @@ def get_pack():
 
 
 def clone_model(net):
-    model = torch.load('logs/temp.ckp', map_location='cpu' if not cfg.base.cuda else 'cuda')
+    model = torch.load('ckps/vgg16_stanford_baseline.ckp', map_location='cpu' if not cfg.base.cuda else 'cuda')
     model = model.cuda()
     gbns = GatedBatchNorm2d.transform(model)
     model.load_state_dict(net.state_dict())
