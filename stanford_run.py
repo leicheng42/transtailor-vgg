@@ -129,7 +129,7 @@ def clone_model(net):
     model = torch.load('logs/temp.ckp', map_location='cpu' if not cfg.base.cuda else 'cuda')
     model = model.cuda()
     model = torch.nn.DataParallel(model)
-    gbns = GatedBatchNorm2d.transform(model)
+    gbns = GatedBatchNorm2d.transform(model.module)
     model.load_state_dict(net.state_dict())
     return model, gbns
 
